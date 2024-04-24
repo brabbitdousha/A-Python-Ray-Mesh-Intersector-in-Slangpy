@@ -37,3 +37,18 @@ void generateElements(
     ele_aabb[primitiveIndex, 4] = aabb_max.y;
     ele_aabb[primitiveIndex, 5] = aabb_max.z;
 }
+
+[AutoPyBindCUDA]
+[CUDAKernel]
+void debug_cb(
+    TensorView<int> a,
+    TensorView<int> b
+    )
+{
+    for (int i = 0; i < a.size(0); i++)
+    {
+        uint x = a[i];
+        uint y = countbits(x);
+        b[i] = int(y);
+    }
+}
