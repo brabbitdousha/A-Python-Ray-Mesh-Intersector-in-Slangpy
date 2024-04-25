@@ -38,6 +38,15 @@ void generateElements(
     ele_aabb[primitiveIndex, 5] = aabb_max.z;
 }
 
+int findMSB(uint val) {
+    if (val == 0) return -1;
+    int msb = 31;  // 32 uint
+    while (!bool((val >> msb) & 1)) {
+        msb--;
+    }
+    return msb;
+}
+
 [AutoPyBindCUDA]
 [CUDAKernel]
 void debug_cb(
@@ -48,7 +57,8 @@ void debug_cb(
     for (int i = 0; i < a.size(0); i++)
     {
         uint x = a[i];
-        uint y = countbits(x);
+        // uint y = countbits(x);
+        uint y = findMSB(x);
         b[i] = int(y);
     }
 }

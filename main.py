@@ -4,18 +4,32 @@ import torch
 import trimesh
 import pyexr
 import slangpy
+import time
+import csv
+import numpy as np
 
 
 m_gen_ele = slangpy.loadModule('bvhworkers/get_elements.slang')
 m_morton_codes = slangpy.loadModule('bvhworkers/lbvh_morton_codes.slang')
 m_radixsort = slangpy.loadModule('bvhworkers/lbvh_single_radixsort.slang')
 m_hierarchy = slangpy.loadModule('bvhworkers/lbvh_hierarchy.slang')
+m_bounding_box = slangpy.loadModule('bvhworkers/lbvh_bounding_boxes.slang')
+
+#debug
+'''
+input = torch.tensor((32, 31, 8, 7), dtype=torch.int).cuda()
+output = torch.zeros_like(input).cuda()
+m_gen_ele.debug_cb(a=input, b=output)\
+.launchRaw(blockSize=(1, 1, 1), gridSize=(1, 1, 1))
+print(output)
+'''
 
 mesh = trimesh.load('./models/dragon.obj')
 
 vrt = torch.from_numpy(mesh.vertices).cuda().float()
 v_ind = torch.from_numpy(mesh.faces).cuda().int()
 
+start_time = time.time()
 #first part, get element and bbox---------------
 primitive_num = v_ind.shape[0]
 ele_primitiveIdx = torch.zeros((primitive_num, 1), dtype=torch.int).cuda()
@@ -59,10 +73,22 @@ LBVHConstructionInfo = torch.zeros((num_LBVH_ELEMENTS, 2), dtype=torch.int).cuda
 m_hierarchy.hierarchy(g_num_elements=int(num_ELEMENTS), ele_primitiveIdx=ele_primitiveIdx, ele_aabb=ele_aabb,
                       g_sorted_morton_codes=morton_codes_ele, g_lbvh_info=LBVHNode_info, g_lbvh_aabb=LBVHNode_aabb, g_lbvh_construction_infos=LBVHConstructionInfo)\
 .launchRaw(blockSize=(256, 1, 1), gridSize=((num_ELEMENTS+255)//256, 1, 1))
-#debug
-#input = torch.tensor((32, 31, 8, 7), dtype=torch.int).cuda()
-#output = torch.zeros_like(input).cuda()
-#m_gen_ele.debug_cb(a=input, b=output)\
-#.launchRaw(blockSize=(1, 1, 1), gridSize=(1, 1, 1))
-#print(output)
+
+#--------------------------------------------------
+# bounding_boxes
+
+m_bounding_box.bounding_boxes(g_num_elements=int(num_ELEMENTS), g_lbvh_info=LBVHNode_info, g_lbvh_aabb=LBVHNode_aabb, g_lbvh_construction_infos=LBVHConstructionInfo)\
+.launchRaw(blockSize=(256, 1, 1), gridSize=((num_ELEMENTS+255)//256, 1, 1))
+
+end_time = time.time()
+elapsed_time = end_time - start_time
+print(f"GPU bvh build finished in: {elapsed_time} s")
+
+#write
+LBVHbuffer = np.concatenate((LBVHNode_info.cpu().numpy(), LBVHNode_aabb.cpu().numpy()), axis=-1)
+
+with open('./data.csv', 'w') as csvfile:
+    csvfile.write("left right primitiveIdx aabb_min_x aabb_min_y aabb_min_z aabb_max_x aabb_max_y aabb_max_z\n")
+    np.savetxt(csvfile, LBVHbuffer, delimiter=' ', fmt='%g')
+
 print("over!")
