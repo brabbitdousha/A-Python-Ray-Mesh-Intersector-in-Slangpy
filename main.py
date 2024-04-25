@@ -9,6 +9,7 @@ import slangpy
 m_gen_ele = slangpy.loadModule('bvhworkers/get_elements.slang')
 m_morton_codes = slangpy.loadModule('bvhworkers/lbvh_morton_codes.slang')
 m_radixsort = slangpy.loadModule('bvhworkers/lbvh_single_radixsort.slang')
+m_hierarchy = slangpy.loadModule('bvhworkers/lbvh_hierarchy.slang')
 
 mesh = trimesh.load('./models/dragon.obj')
 
@@ -48,11 +49,20 @@ morton_codes_ele_pingpong = torch.zeros((num_ELEMENTS, 2), dtype=torch.int).cuda
 m_radixsort.radix_sort(g_num_elements=int(num_ELEMENTS), g_elements_in=morton_codes_ele, g_elements_out=morton_codes_ele_pingpong)\
 .launchRaw(blockSize=(256, 1, 1), gridSize=(1, 1, 1))
 
+#--------------------------------------------------
+# hierarchy
+num_LBVH_ELEMENTS = num_ELEMENTS + num_ELEMENTS - 1
+LBVHNode_info = torch.zeros((num_LBVH_ELEMENTS, 3), dtype=torch.int).cuda()
+LBVHNode_aabb = torch.zeros((num_LBVH_ELEMENTS, 6), dtype=torch.float).cuda()
+LBVHConstructionInfo = torch.zeros((num_LBVH_ELEMENTS, 2), dtype=torch.int).cuda()
 
+m_hierarchy.hierarchy(g_num_elements=int(num_ELEMENTS), ele_primitiveIdx=ele_primitiveIdx, ele_aabb=ele_aabb,
+                      g_sorted_morton_codes=morton_codes_ele, g_lbvh_info=LBVHNode_info, g_lbvh_aabb=LBVHNode_aabb, g_lbvh_construction_infos=LBVHConstructionInfo)\
+.launchRaw(blockSize=(256, 1, 1), gridSize=((num_ELEMENTS+255)//256, 1, 1))
 #debug
-input = torch.tensor((32, 31, 8, 7), dtype=torch.int).cuda()
-output = torch.zeros_like(input).cuda()
-m_gen_ele.debug_cb(a=input, b=output)\
-.launchRaw(blockSize=(1, 1, 1), gridSize=(1, 1, 1))
-print(output)
+#input = torch.tensor((32, 31, 8, 7), dtype=torch.int).cuda()
+#output = torch.zeros_like(input).cuda()
+#m_gen_ele.debug_cb(a=input, b=output)\
+#.launchRaw(blockSize=(1, 1, 1), gridSize=(1, 1, 1))
+#print(output)
 print("over!")
