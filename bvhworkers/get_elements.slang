@@ -46,19 +46,32 @@ int findMSB(uint val) {
     }
     return msb;
 }
+uint expandBits(uint v) {
+    v = (v * 0x00010001u) & 0xFF0000FFu;
+    v = (v * 0x00000101u) & 0x0F00F00Fu;
+    v = (v * 0x00000011u) & 0xC30C30C3u;
+    v = (v * 0x00000005u) & 0x49249249u;
+    return v;
+}
+
+// Calculates a 30-bit Morton code for the
+// given 3D point located within the unit cube [0,1].
+uint morton3D(float x, float y, float z) {
+    x = min(max(x * 1024.0f, 0.0f), 1023.0f);
+    y = min(max(y * 1024.0f, 0.0f), 1023.0f);
+    z = min(max(z * 1024.0f, 0.0f), 1023.0f);
+    uint xx = expandBits(uint(x));
+    uint yy = expandBits(uint(y));
+    uint zz = expandBits(uint(z));
+    return xx * 4 + yy * 2 + zz;
+}
 
 [AutoPyBindCUDA]
 [CUDAKernel]
 void debug_cb(
-    TensorView<int> a,
+    TensorView<float> a,
     TensorView<int> b
     )
 {
-    for (int i = 0; i < a.size(0); i++)
-    {
-        uint x = a[i];
-        // uint y = countbits(x);
-        uint y = findMSB(x);
-        b[i] = int(y);
-    }
+    b[0] = morton3D(a[0], a[1], a[2]);
 }

@@ -1,2 +1,3 @@
 bvhworkers/.slangpy_cache
-*.csv
+data.csv
+sorted_mc.txt

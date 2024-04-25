@@ -16,13 +16,13 @@ m_hierarchy = slangpy.loadModule('bvhworkers/lbvh_hierarchy.slang')
 m_bounding_box = slangpy.loadModule('bvhworkers/lbvh_bounding_boxes.slang')
 
 #debug
-'''
-input = torch.tensor((32, 31, 8, 7), dtype=torch.int).cuda()
-output = torch.zeros_like(input).cuda()
+#'''
+input = torch.tensor((0.6,0.7,0.8), dtype=torch.float).cuda()
+output = torch.zeros(input.shape, dtype=torch.int).cuda()
 m_gen_ele.debug_cb(a=input, b=output)\
 .launchRaw(blockSize=(1, 1, 1), gridSize=(1, 1, 1))
 print(output)
-'''
+#'''
 
 mesh = trimesh.load('./models/dragon.obj')
 
@@ -90,5 +90,11 @@ LBVHbuffer = np.concatenate((LBVHNode_info.cpu().numpy(), LBVHNode_aabb.cpu().nu
 with open('./data.csv', 'w') as csvfile:
     csvfile.write("left right primitiveIdx aabb_min_x aabb_min_y aabb_min_z aabb_max_x aabb_max_y aabb_max_z\n")
     np.savetxt(csvfile, LBVHbuffer, delimiter=' ', fmt='%g')
+
+#debug
+sorted_mc_codes = morton_codes_ele.cpu().numpy()
+with open('./sorted_mc.txt', 'w') as mc:
+    np.set_printoptions(suppress=True)
+    np.savetxt(mc, sorted_mc_codes, delimiter=' ', fmt='%d')
 
 print("over!")

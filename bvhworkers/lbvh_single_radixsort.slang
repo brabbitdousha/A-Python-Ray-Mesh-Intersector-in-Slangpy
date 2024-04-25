@@ -31,7 +31,7 @@ void radix_sort(int g_num_elements, TensorView<int> g_elements_in, TensorView<in
     uint sID = cudaThreadIdx().x / WaveGetLaneCount();
     uint lsID = WaveGetLaneIndex();
 
-    const WaveMask mask = 0xff;
+    const WaveMask mask = WaveGetConvergedMask();
 
     for (uint iteration = 0; iteration < ITERATIONS; iteration++) {
         uint shift = 8 * iteration;
