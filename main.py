@@ -24,7 +24,7 @@ m_gen_ele.debug_cb(a=input, b=output)\
 print(output)
 #'''
 
-mesh = trimesh.load('./models/dragon.obj')
+mesh = trimesh.load('./models/dump_r_0.005_no_f.obj')
 
 vrt = torch.from_numpy(mesh.vertices).cuda().float()
 v_ind = torch.from_numpy(mesh.faces).cuda().int()
@@ -76,25 +76,63 @@ m_hierarchy.hierarchy(g_num_elements=int(num_ELEMENTS), ele_primitiveIdx=ele_pri
 
 #--------------------------------------------------
 # bounding_boxes
+#'''
+#m_bounding_box.bounding_boxes(g_num_elements=int(num_ELEMENTS), g_lbvh_info=LBVHNode_info, g_lbvh_aabb=LBVHNode_aabb, g_lbvh_construction_infos=LBVHConstructionInfo)\
+#.launchRaw(blockSize=(256, 1, 1), gridSize=((num_ELEMENTS+255)//256, 1, 1))
 
+'''
+LBVHConstructionInfo[:,1] = 0
 m_bounding_box.bounding_boxes(g_num_elements=int(num_ELEMENTS), g_lbvh_info=LBVHNode_info, g_lbvh_aabb=LBVHNode_aabb, g_lbvh_construction_infos=LBVHConstructionInfo)\
 .launchRaw(blockSize=(256, 1, 1), gridSize=((num_ELEMENTS+255)//256, 1, 1))
+'''
+tree_heights = torch.zeros((num_ELEMENTS, 1), dtype=torch.int).cuda()
+m_bounding_box.get_bvh_height(g_num_elements=int(num_ELEMENTS), g_lbvh_info=LBVHNode_info, g_lbvh_aabb=LBVHNode_aabb, 
+                              g_lbvh_construction_infos=LBVHConstructionInfo, tree_heights=tree_heights)\
+.launchRaw(blockSize=(256, 1, 1), gridSize=((num_ELEMENTS+255)//256, 1, 1))
 
+for i in range(tree_heights.max()):
+    m_bounding_box.get_bbox(g_num_elements=int(num_ELEMENTS), expected_height=int(i+1),
+                        g_lbvh_info=LBVHNode_info, g_lbvh_aabb=LBVHNode_aabb, 
+                                g_lbvh_construction_infos=LBVHConstructionInfo)\
+    .launchRaw(blockSize=(256, 1, 1), gridSize=((num_ELEMENTS+255)//256, 1, 1))
+
+m_bounding_box.set_root(
+              g_lbvh_info=LBVHNode_info, g_lbvh_aabb=LBVHNode_aabb)\
+    .launchRaw(blockSize=(1, 1, 1), gridSize=(1, 1, 1))    
+#'''
 end_time = time.time()
 elapsed_time = end_time - start_time
 print(f"GPU bvh build finished in: {elapsed_time} s")
 
 #write
-LBVHbuffer = np.concatenate((LBVHNode_info.cpu().numpy(), LBVHNode_aabb.cpu().numpy()), axis=-1)
+LBVHbuffer = np.column_stack((LBVHNode_info.cpu().numpy(), LBVHNode_aabb.cpu().numpy()))
 
+np.set_printoptions(suppress=True)
 with open('./data.csv', 'w') as csvfile:
-    csvfile.write("left right primitiveIdx aabb_min_x aabb_min_y aabb_min_z aabb_max_x aabb_max_y aabb_max_z\n")
-    np.savetxt(csvfile, LBVHbuffer, delimiter=' ', fmt='%g')
+    csvfile.write("left right primitiveIdx aabb_min_x aabb_min_y aabb_min_z aabb_max_x aabb_max_y aabb_max_z\n")  
+    np.savetxt(csvfile, LBVHbuffer, delimiter=' ', fmt='%d %d %d %f %f %f %f %f %f')
 
 #debug
+'''
 sorted_mc_codes = morton_codes_ele.cpu().numpy()
 with open('./sorted_mc.txt', 'w') as mc:
-    np.set_printoptions(suppress=True)
+    #np.set_printoptions(suppress=True)
     np.savetxt(mc, sorted_mc_codes, delimiter=' ', fmt='%d')
 
+lbvhconinfo = LBVHConstructionInfo.cpu().numpy()
+with open('./lbvhconinfo.txt', 'w') as mc:
+    np.set_printoptions(suppress=True)
+    np.savetxt(mc, lbvhconinfo, delimiter=' ', fmt='%d')
+
+lbvh_aabb = LBVHNode_aabb.cpu().numpy()
+with open('./lbvhaabb.txt', 'w') as mc:
+    np.set_printoptions(suppress=True)
+    np.savetxt(mc, lbvh_aabb, delimiter=' ', fmt='%f')
+
+my_ele_aabb = ele_aabb.cpu().numpy()
+with open('./my_ele_aabb.txt', 'w') as mc:
+    np.set_printoptions(suppress=True)
+    np.savetxt(mc, my_ele_aabb, delimiter=' ', fmt='%g')
+
+'''
 print("over!")
