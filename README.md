@@ -15,3 +15,11 @@ run ```test.py```, which will let you know every step of building it.
 and you will get a position map of a bunny.
 ![img](imgs/bunny.png)
 
+### performance
+simply querying the trees in kernel helps a lot, to get the position map of the bunny above, I compared with [Triro](https://github.com/lcp29/trimesh-ray-optix), which uses **NVIDIA OptiX** to find intersections 
+
+```
+GPU ray query time(test on RTX4090):
+Triro : 0.015184 s
+mine: 0.001178s
+```
