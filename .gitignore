@@ -2,3 +2,6 @@ bvhworkers/.slangpy_cache
 data.csv
 sorted_mc.txt
 *.txt
+/models
+__pycache__
+.vscode
