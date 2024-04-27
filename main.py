@@ -14,6 +14,7 @@ m_morton_codes = slangpy.loadModule('bvhworkers/lbvh_morton_codes.slang')
 m_radixsort = slangpy.loadModule('bvhworkers/lbvh_single_radixsort.slang')
 m_hierarchy = slangpy.loadModule('bvhworkers/lbvh_hierarchy.slang')
 m_bounding_box = slangpy.loadModule('bvhworkers/lbvh_bounding_boxes.slang')
+m_intersect_test = slangpy.loadModule('bvhworkers/intersect_test.slang')
 
 #debug
 #'''
@@ -24,7 +25,7 @@ m_gen_ele.debug_cb(a=input, b=output)\
 print(output)
 #'''
 
-mesh = trimesh.load('./models/dump_r_0.005_no_f.obj')
+mesh = trimesh.load('./models/bunny.obj')
 
 vrt = torch.from_numpy(mesh.vertices).cuda().float()
 v_ind = torch.from_numpy(mesh.faces).cuda().int()
@@ -76,21 +77,24 @@ m_hierarchy.hierarchy(g_num_elements=int(num_ELEMENTS), ele_primitiveIdx=ele_pri
 
 #--------------------------------------------------
 # bounding_boxes
-#'''
-#m_bounding_box.bounding_boxes(g_num_elements=int(num_ELEMENTS), g_lbvh_info=LBVHNode_info, g_lbvh_aabb=LBVHNode_aabb, g_lbvh_construction_infos=LBVHConstructionInfo)\
-#.launchRaw(blockSize=(256, 1, 1), gridSize=((num_ELEMENTS+255)//256, 1, 1))
-
 '''
+m_bounding_box.bounding_boxes(g_num_elements=int(num_ELEMENTS), g_lbvh_info=LBVHNode_info, g_lbvh_aabb=LBVHNode_aabb, g_lbvh_construction_infos=LBVHConstructionInfo)\
+.launchRaw(blockSize=(256, 1, 1), gridSize=((num_ELEMENTS+255)//256, 1, 1))
+
+
 LBVHConstructionInfo[:,1] = 0
 m_bounding_box.bounding_boxes(g_num_elements=int(num_ELEMENTS), g_lbvh_info=LBVHNode_info, g_lbvh_aabb=LBVHNode_aabb, g_lbvh_construction_infos=LBVHConstructionInfo)\
 .launchRaw(blockSize=(256, 1, 1), gridSize=((num_ELEMENTS+255)//256, 1, 1))
 '''
+
+#'''
 tree_heights = torch.zeros((num_ELEMENTS, 1), dtype=torch.int).cuda()
 m_bounding_box.get_bvh_height(g_num_elements=int(num_ELEMENTS), g_lbvh_info=LBVHNode_info, g_lbvh_aabb=LBVHNode_aabb, 
                               g_lbvh_construction_infos=LBVHConstructionInfo, tree_heights=tree_heights)\
 .launchRaw(blockSize=(256, 1, 1), gridSize=((num_ELEMENTS+255)//256, 1, 1))
 
-for i in range(tree_heights.max()):
+tree_height_max = tree_heights.max()
+for i in range(tree_height_max):
     m_bounding_box.get_bbox(g_num_elements=int(num_ELEMENTS), expected_height=int(i+1),
                         g_lbvh_info=LBVHNode_info, g_lbvh_aabb=LBVHNode_aabb, 
                                 g_lbvh_construction_infos=LBVHConstructionInfo)\
@@ -99,6 +103,7 @@ for i in range(tree_heights.max()):
 m_bounding_box.set_root(
               g_lbvh_info=LBVHNode_info, g_lbvh_aabb=LBVHNode_aabb)\
     .launchRaw(blockSize=(1, 1, 1), gridSize=(1, 1, 1))    
+#'''
 #'''
 end_time = time.time()
 elapsed_time = end_time - start_time
@@ -135,4 +140,36 @@ with open('./my_ele_aabb.txt', 'w') as mc:
     np.savetxt(mc, my_ele_aabb, delimiter=' ', fmt='%g')
 
 '''
-print("over!")
+print("bvh build over!")
+
+# generating rays
+y, x = torch.meshgrid([torch.linspace(1, -1, 800), 
+                       torch.linspace(-1, 1, 800)], indexing='ij')
+z = -torch.ones_like(x)
+ray_directions = torch.stack([x, y, z], dim=-1).cuda()
+ray_origins = torch.Tensor([0, 0.1, 0.3]).cuda().broadcast_to(ray_directions.shape)
+
+ray_origins = ray_origins.contiguous().reshape(-1,3)
+ray_directions = ray_directions.contiguous().reshape(-1,3)
+
+num_rays=ray_origins.shape[0]
+
+start_time = time.time()
+hit = torch.zeros((num_rays, 1), dtype=torch.int).cuda()
+hit_pos_map = torch.zeros((num_rays, 3), dtype=torch.float).cuda()
+
+m_intersect_test.intersect(num_rays=int(num_rays), rays_o=ray_origins, rays_d=ray_directions,
+               g_lbvh_info=LBVHNode_info, g_lbvh_aabb=LBVHNode_aabb,
+               vert=vrt, v_indx=v_ind,
+               hit_map=hit, hit_pos_map=hit_pos_map)\
+.launchRaw(blockSize=(256, 1, 1), gridSize=((num_rays+255)//256, 1, 1))
+end_time = time.time()
+
+elapsed_time = end_time - start_time
+print("ray query time:", elapsed_time, "s")
+
+# drawing result
+#locs = hit.repeat(1,3)
+locs = hit_pos_map
+
+pyexr.write(f'./color.exr', locs.reshape(800,800,3).cpu().numpy())
