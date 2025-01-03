@@ -1,4 +1,5 @@
 bvhworkers/.slangpy_cache
+bvhworkers/*.lock
 data.csv
 sorted_mc.txt
 *.txt
